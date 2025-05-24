@@ -1,0 +1,17 @@
+credentials:
+  refresh_token: "" # Your Amazon refresh token
+  lwa_app_id: "" # Your LWA app ID
+  lwa_client_secret: "" # Your LWA client secret
+  aws_access_key: "" # Your AWS access key
+  aws_secret_key: "" # Your AWS secret key
+  role_arn: "" # Your IAM role ARN
+
+endpoints:
+  na: "https://sellingpartnerapi-na.amazon.com"
+  eu: "https://sellingpartnerapi-eu.amazon.com"
+  fe: "https://sellingpartnerapi-fe.amazon.com"
+
+marketplace_ids:
+  na: "ATVPDKIKX0DER" # US marketplace ID
+  eu: "A1F83G8C2ARO7P" # UK marketplace ID
+  fe: "A1VC38T7YXB528" # Japan marketplace ID
