@@ -27,7 +27,7 @@ const API_URL = 'http://localhost:8000'
 interface PriceComparison {
   flipkart?: { price: number; url: string };
   meesho?: { price: number; url: string };
-  bigbasket?: { price: number; url: string };
+  ebay?: { price: number; url: string };
 }
 
 function App() {
@@ -267,16 +267,16 @@ function App() {
                                 </div>
                               </div>
                             )}
-                            {priceComparison.bigbasket && (
+                            {priceComparison.ebay && (
                               <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <span className="font-medium">BigBasket</span>
+                                <span className="font-medium">ebay</span>
                                 <div className="text-right">
-                                  <p className="text-lg font-semibold">₹{Number(priceComparison.bigbasket.price).toLocaleString('en-IN', {
+                                  <p className="text-lg font-semibold">₹{Number(priceComparison.ebay.price).toLocaleString('en-IN', {
                                     maximumFractionDigits: 0,
                                     minimumFractionDigits: 0
                                   })}</p>
-                                  <a href={priceComparison.bigbasket.url} target="_blank" rel="noopener noreferrer"
-                                     className="text-sm text-blue-500 hover:underline">View on BigBasket</a>
+                                  <a href={priceComparison.ebay.url} target="_blank" rel="noopener noreferrer"
+                                     className="text-sm text-blue-500 hover:underline">View on ebay</a>
                                 </div>
                               </div>
                             )}

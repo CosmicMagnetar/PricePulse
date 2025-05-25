@@ -24,6 +24,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import aiohttp
+from backend.scraper import scrape_amazon_product
 
 load_dotenv()
 
@@ -50,7 +51,7 @@ class AlertRequest(BaseModel):
 class PriceComparisonResponse(BaseModel):
     flipkart: Optional[dict] = None
     meesho: Optional[dict] = None
-    bigbasket: Optional[dict] = None
+    ebay: Optional[dict] = None
 
 # Mock data for testing
 MOCK_PRODUCTS = {
@@ -98,6 +99,10 @@ fastmail = FastMail(email_conf)
 def init_db():
     conn = sqlite3.connect('prices.db')
     c = conn.cursor()
+    
+    # Drop the existing price_comparisons table if it exists
+    c.execute('DROP TABLE IF EXISTS price_comparisons')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS products
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   url TEXT UNIQUE,
@@ -128,8 +133,8 @@ def init_db():
                   flipkart_url TEXT,
                   meesho_price REAL,
                   meesho_url TEXT,
-                  bigbasket_price REAL,
-                  bigbasket_url TEXT,
+                  ebay_price REAL,
+                  ebay_url TEXT,
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (product_id) REFERENCES products (id))''')
     
@@ -148,135 +153,16 @@ def extract_product_info(url: str):
     print(f"Extracted product ID: {product_id}")  # Debug log
     
     try:
-        # Configure Chrome options
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')  # Run in headless mode
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+        # Use ScrapingBee for scraping
+        product_info = scrape_amazon_product(url)
         
-        # Initialize the Chrome driver
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        if not product_info['name'] or not product_info['current_price']:
+            raise HTTPException(status_code=400, detail="Could not extract product information")
         
-        try:
-            print(f"Fetching URL: {url}")  # Debug log
-            driver.get(url)
-            
-            # Wait for the page to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "productTitle"))
-            )
-            
-            # Add random delay
-            time.sleep(random.uniform(2, 4))
-            
-            # Check for CAPTCHA
-            if "Robot Check" in driver.page_source or "Enter the characters you see below" in driver.page_source:
-                print("Amazon is blocking our requests")  # Debug log
-                raise HTTPException(status_code=403, detail="Amazon is blocking our requests. Please try again later.")
-            
-            # Extract product information
-            try:
-                name = driver.find_element(By.ID, "productTitle").text.strip()
-            except:
-                try:
-                    name = driver.find_element(By.CSS_SELECTOR, "h1#title").text.strip()
-                except:
-                    raise HTTPException(status_code=400, detail="Could not find product name")
-            
-            # Try multiple price selectors
-            price = None
-            price_selectors = [
-                "span.a-offscreen",
-                "span.a-price-whole",
-                "span.a-price",
-                "span.a-price a-text-price",
-                "span.a-price.aok-align-center",
-                "span.a-price.aok-align-center.reinventPricePriceToPayMargin.priceToPay",
-                "div#priceblock_ourprice",
-                "div#priceblock_dealprice",
-                "span.a-color-price",
-                "span.a-price.a-text-price.a-size-medium",
-                "span.a-price.a-text-price.a-size-medium.apexPriceToPay"
-            ]
-            
-            for selector in price_selectors:
-                try:
-                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                    for element in elements:
-                        price_text = element.text.strip()
-                        print(f"Found price text using selector {selector}: {price_text}")  # Debug log
-                        
-                        # Handle Indian price format (₹ symbol and commas)
-                        price_text = price_text.replace('₹', '').replace(',', '')
-                        # Remove any non-numeric characters except decimal point
-                        price_text = re.sub(r'[^\d.]', '', price_text)
-                        
-                        try:
-                            price = float(price_text)
-                            if price > 0:  # Ensure price is valid
-                                print(f"Successfully parsed price: {price}")  # Debug log
-                                break
-                        except ValueError:
-                            continue
-                    
-                    if price:
-                        break
-                except Exception as e:
-                    print(f"Error with selector {selector}: {str(e)}")  # Debug log
-                    continue
-            
-            if not price:
-                print("Could not find or parse price")  # Debug log
-                raise HTTPException(status_code=400, detail="Could not find or parse product price")
-            
-            # Try to find the image
-            image_url = None
-            image_selectors = [
-                "img#landingImage",
-                "img#imgBlkFront",
-                "img.a-dynamic-image",
-                "img.a-dynamic-image.a-stretch-vertical",
-                "img.a-dynamic-image.a-stretch-horizontal",
-                "img.a-dynamic-image.a-stretch-horizontal.a-stretch-vertical",
-                "div#imageBlock img",
-                "div#main-image-container img"
-            ]
-            
-            for selector in image_selectors:
-                try:
-                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                    for element in elements:
-                        image_url = element.get_attribute("src") or element.get_attribute("data-old-hires")
-                        if image_url:
-                            print(f"Found image URL using selector {selector}: {image_url}")  # Debug log
-                            break
-                    if image_url:
-                        break
-                except Exception as e:
-                    print(f"Error with image selector {selector}: {str(e)}")  # Debug log
-                    continue
-            
-            if not image_url:
-                print("Could not find image URL")  # Debug log
-                image_url = "https://via.placeholder.com/300"
-            
-            print(f"Extracted - Name: {name}, Price: {price}, Image: {image_url}")  # Debug log
-            
-            return {
-                'name': name,
-                'current_price': price,
-                'image_url': image_url
-            }
-            
-        finally:
-            driver.quit()
-            
+        return product_info
+        
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")  # Debug log
+        print(f"Error extracting product info: {str(e)}")  # Debug log
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 def save_product_info(url: str, product_info: dict):
@@ -501,7 +387,7 @@ async def compare_prices(product_id: int):
         # Save price comparison to database
         c.execute("""
             INSERT INTO price_comparisons 
-            (product_id, flipkart_price, flipkart_url, meesho_price, meesho_url, bigbasket_price, bigbasket_url)
+            (product_id, flipkart_price, flipkart_url, meesho_price, meesho_url, ebay_price, ebay_url)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             product_id,
@@ -509,8 +395,8 @@ async def compare_prices(product_id: int):
             price_comparison.get('flipkart', {}).get('url'),
             price_comparison.get('meesho', {}).get('price'),
             price_comparison.get('meesho', {}).get('url'),
-            price_comparison.get('bigbasket', {}).get('price'),
-            price_comparison.get('bigbasket', {}).get('url')
+            price_comparison.get('ebay', {}).get('price'),
+            price_comparison.get('ebay', {}).get('url')
         ))
         
         conn.commit()
@@ -533,9 +419,9 @@ async def get_multi_platform_prices(product_data: dict) -> dict:
             "price": product_data['current_price'] * 0.98,  # 2% cheaper
             "url": f"https://www.meesho.com/search?q={product_data['name'].replace(' ', '+')}"
         },
-        "bigbasket": {
+        "ebay": {
             "price": product_data['current_price'] * 1.02,  # 2% more expensive
-            "url": f"https://www.bigbasket.com/search/?q={product_data['name'].replace(' ', '+')}"
+            "url": f"https://www.ebay.com/search/?q={product_data['name'].replace(' ', '+')}"
         }
     }
 
