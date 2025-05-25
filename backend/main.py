@@ -23,6 +23,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+import aiohttp
 
 load_dotenv()
 
@@ -45,6 +46,11 @@ class AlertRequest(BaseModel):
     url: str
     email: EmailStr
     target_price: float
+
+class PriceComparisonResponse(BaseModel):
+    flipkart: Optional[dict] = None
+    meesho: Optional[dict] = None
+    bigbasket: Optional[dict] = None
 
 # Mock data for testing
 MOCK_PRODUCTS = {
@@ -113,6 +119,18 @@ def init_db():
                   email TEXT,
                   target_price REAL,
                   created_at TIMESTAMP,
+                  FOREIGN KEY (product_id) REFERENCES products (id))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS price_comparisons
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  product_id INTEGER,
+                  flipkart_price REAL,
+                  flipkart_url TEXT,
+                  meesho_price REAL,
+                  meesho_url TEXT,
+                  bigbasket_price REAL,
+                  bigbasket_url TEXT,
+                  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (product_id) REFERENCES products (id))''')
     
     conn.commit()
@@ -410,8 +428,11 @@ async def track_product(product: ProductURL):
         try:
             product_info = extract_product_info(product.url)
             print(f"Extracted product info: {product_info}")  # Debug log
-            product_id = save_product_info(product.url, product_info)
-            price_history = get_price_history(product_id)
+            db_product_id = save_product_info(product.url, product_info)
+            price_history = get_price_history(db_product_id)
+            
+            # Add product ID to the response
+            product_info['id'] = db_product_id
             
             return {
                 "product": product_info,
@@ -455,6 +476,68 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/compare/{product_id}", response_model=PriceComparisonResponse)
+async def compare_prices(product_id: int):
+    """Get price comparison from multiple platforms for a product."""
+    try:
+        # Get product from database
+        conn = sqlite3.connect('prices.db')
+        c = conn.cursor()
+        c.execute("SELECT url, name FROM products WHERE id = ?", (product_id,))
+        product = c.fetchone()
+        
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        url, name = product
+        
+        # Get product data
+        product_data = extract_product_info(url)
+        
+        # Get multi-platform prices using OpenRouter
+        price_comparison = await get_multi_platform_prices(product_data)
+        
+        # Save price comparison to database
+        c.execute("""
+            INSERT INTO price_comparisons 
+            (product_id, flipkart_price, flipkart_url, meesho_price, meesho_url, bigbasket_price, bigbasket_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            product_id,
+            price_comparison.get('flipkart', {}).get('price'),
+            price_comparison.get('flipkart', {}).get('url'),
+            price_comparison.get('meesho', {}).get('price'),
+            price_comparison.get('meesho', {}).get('url'),
+            price_comparison.get('bigbasket', {}).get('price'),
+            price_comparison.get('bigbasket', {}).get('url')
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return price_comparison
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def get_multi_platform_prices(product_data: dict) -> dict:
+    """Get price comparison from multiple platforms."""
+    # Mock data for testing
+    return {
+        "flipkart": {
+            "price": product_data['current_price'] * 0.95,  # 5% cheaper
+            "url": f"https://www.flipkart.com/search?q={product_data['name'].replace(' ', '+')}"
+        },
+        "meesho": {
+            "price": product_data['current_price'] * 0.98,  # 2% cheaper
+            "url": f"https://www.meesho.com/search?q={product_data['name'].replace(' ', '+')}"
+        },
+        "bigbasket": {
+            "price": product_data['current_price'] * 1.02,  # 2% more expensive
+            "url": f"https://www.bigbasket.com/search/?q={product_data['name'].replace(' ', '+')}"
+        }
+    }
 
 if __name__ == "__main__":
     start_scheduler()  # Start the price update scheduler
