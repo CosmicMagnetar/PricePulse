@@ -7,12 +7,17 @@ from .database import SessionLocal
 from .email_service import send_price_alert_email
 import aiohttp
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 scheduler = AsyncIOScheduler()
 
 async def get_multi_platform_prices(product_data: dict) -> dict:
     """Get price comparison from multiple platforms using OpenRouter API."""
-    OPENROUTER_API_KEY = "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"
+    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY environment variable is not set")
     
     # Extract metadata for search query
     title = product_data.get('title', '')
