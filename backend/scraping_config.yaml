@@ -1,5 +1,5 @@
 scrapingbee:
-  api_key: "RME6ONXRR2WI8CM5U61C1WUAVCP754DUFY8M5VXJSUCJK8TGOSVQ0ESMQDN7YVOIPR8QJZRUSEI9PHZ6" # Your ScrapingBee API key
+  api_key: "15JEV8RO5HC2NVE7JJMKM19UUCWLFKOHB9RNDXGDOFPWS6U3IC1D2I0HR5N3EPZ9TYZLIILFO3G5PYDP" # Your ScrapingBee API key
   render_js: true # Enable JavaScript rendering
   premium_proxy: true # Use premium proxies
   country_code: "us" # Use US proxies
