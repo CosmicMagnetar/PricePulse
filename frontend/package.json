@@ -13,10 +13,12 @@
     "@heroicons/react": "^2.2.0",
     "axios": "^1.6.7",
     "chart.js": "^4.4.1",
+    "firebase": "^11.8.1",
     "framer-motion": "^12.12.2",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^7.6.1",
     "react-toastify": "^11.0.5"
   },
   "devDependencies": {
