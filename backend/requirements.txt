@@ -11,3 +11,4 @@ email-validator==2.1.0.post1
 aiohttp==3.9.3
 selenium==4.18.1
 webdriver-manager==4.0.1 
+scrapingbee
