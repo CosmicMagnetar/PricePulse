@@ -26,7 +26,7 @@ ChartJS.register(
   Legend
 )
 
-const API_URL = 'http://localhost:8000'
+const API_URL = 'https://pricepulse-avur.onrender.com'
 
 interface PriceComparison {
   flipkart?: { price: number; url: string };
